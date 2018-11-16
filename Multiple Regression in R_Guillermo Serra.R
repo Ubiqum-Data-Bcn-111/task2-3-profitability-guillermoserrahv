@@ -1,6 +1,17 @@
 setwd("/Users/guillermoserrahv/Desktop/Ubiqum/GitHub_Ubiqum/ubiqum1/task2-3-profitability-guillermoserrahv")
 getwd()
 
+# Appendix of data names and included values
+
+#MReg - Original, unedited file
+#MRegDum - Isolated dummy variables extracted from Product Type
+#MRD - Data including the dummies, but minus BestSellersRank
+#corrMRD - MRD ran under the correlation matrix with ALL variables
+#MRD05 - MRD excluding 5 Star Reviews
+#DTcorrMRD - Decision Tree on the correlation matrix data
+#CHI2 - A reduced sample including only the Volume, Service Reviews and Customer Reviews
+#CHI2T - Chi squared ran over CHI2.
+
 ##############################-INSTALLING LIBRARIES & DATA PREPARATION-##########################################
 # Install appropiate libraries here 
 library(readr)
@@ -12,7 +23,6 @@ library(plyr)
 library(dplyr)
 library(ggplot2)
 library(ggcorrplot)
-#library(corrplot)
 library(reshape2)
 library(RColorBrewer)
 library(rpart.plot)
@@ -30,6 +40,18 @@ names(MReg)        # Names your attributes
 # Dummify the data
 MRegDum <- dummyVars(" ~ .", data=MReg)
 MRD <- data.frame(predict(MRegDum, newdata=MReg))
+
+
+# CHECK THIS PART, MAKE SURE IS CORRECT!! INCLUDING THE ONE BELOW  (REMOVE IT?????)
+MRD$ProductNum <- MReg$ProductNum
+head(MRD)
+
+#merging the two datasets readyData and existingprod (REMOVE ITTTTTTTTTT?????? HURRRY UP!!!!!!!)
+MRDum <- merge(MRD,MReg,by="ProductNum")
+head(MRDum)
+summary(MRDum)
+MRDum
+
 
 # Checking the datatypes in the dataframe
 str(MReg)
@@ -53,7 +75,7 @@ for(i in 1:(ncol(MRD))) {    #for every column
   }
 }
 
-# Neural model
+# Neural model (ANN) (ASK ABDEL ON THIS ONE)(MAKE SURE TO MENTIONED THE "BENEFITS" OVER SVM FROM BAYES BOOK)
 for (i in 1:(ncol(CHI2))) {
   predictions = compute(get(paste("neuralmodel_t", i, sep = "")), MRDNO5[, 1:4])
   qqnorm(CHI2[,i],main=paste("Test",colnames(CHI2)[i])) #plot qqnorm
@@ -61,7 +83,6 @@ for (i in 1:(ncol(CHI2))) {
   hist(CHI2[,i],main=paste("Histogram of",colnames(CHI2)[i]), 
        xlab=colnames(CHI2)[i])
 }
-
 
 ?neuralmodel_t
 
@@ -101,6 +122,9 @@ rpart.plot(DTcorrMRD) #plot the decision tree
 # Remove x5Starreviews from the dataset
 MRDNO5<-MRD[,c(-15)]
 
+tree<- rpart(Volume~., data=existingtot, cp=0.001)
+rpart.plot(tree)
+
 #############################################-BELOW: FOR UPDATING ABOVE-##################################
 
 
@@ -138,9 +162,7 @@ rpart.plot(CHI2T) #plot the decision tree
 
 #####################################-MANOVA#######################################################
 
-# Compare volume against a metric from the service and one from the shipping
-
-#
+# Compare volume against a metric from the service and one from the shipping (4 star and positive reviews)
 
 # 2x2 Factorial MANOVA with 3 Dependent Variables. 
 Y <- cbind(y1,y2,y3)
@@ -153,14 +175,18 @@ petl <- iris$Petal.Length
 res.man <- manova(cbind(Sepal.Length, Petal.Length) ~ Species, data = iris)
 summary(res.man)
 
+
+# Look to see which differ
+summary.aov(res.man)
+
 #####################################-DATA SPLITTING-#############################################
 
 set.seed(123)
 # Set a 80/20 split
-inTraining <- createDataPartition(survey_cat$brand, p = .8, list = FALSE) # add volume as a variable
+INTraining <- createDataPartition(survey_cat$brand, p = .8, list = FALSE) # add volume as a variable
 #creates a vector with the rows to use for training
-training <- survey_cat[inTraining,] #subset training set
-testing <- survey_cat[-inTraining,] #subset testing set
+MRDtraining <- survey_cat[inTraining,] #subset training set
+MRDtesting <- survey_cat[-inTraining,] #subset testing set
 
 #################################################-ALGORITHMS-############################################
 
@@ -177,10 +203,28 @@ calibrate.plot(y, p, distribution = "bernoulli", replace = TRUE,
 
 ##########################-Bayesian Linear Regression-############################
 
+#Ask Abdel for help on this, should be in the Bayes Statistical methods book
 
 
-summary(MRDNO5)
 
 
 
+##############################-APPLY MODELS TO TESTING DATA-##################################
+
+#COPY FROM PREVIOUS TASK
+
+
+
+output <- newproductattributes 
+
+output$predictions <- finalPred
+
+
+################################-SAVE THE FILE-##########################################
+
+
+rite.csv(output, file="C2.T3output.csv", row.names = TRUE)
+
+
+#MAKE SURE THAT THE INFORMATION IS RELEVANT TO THE 4 PRODUCTS THAT BLACKWELL WANTS
 
