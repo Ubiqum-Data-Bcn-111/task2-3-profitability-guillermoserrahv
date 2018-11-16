@@ -9,6 +9,7 @@ library(rpart)
 library(rpart.plot)
 library(data.table)
 library(plyr)
+library(dplyr)
 library(ggplot2)
 library(ggcorrplot)
 #library(corrplot)
@@ -51,6 +52,18 @@ for(i in 1:(ncol(MRD))) {    #for every column
          xlab=colnames(MRD)[i])
   }
 }
+
+# Neural model
+for (i in 1:(ncol(CHI2))) {
+  predictions = compute(get(paste("neuralmodel_t", i, sep = "")), MRDNO5[, 1:4])
+  qqnorm(CHI2[,i],main=paste("Test",colnames(CHI2)[i])) #plot qqnorm
+  qqline(CHI2[,i],col="blue") #add qqnormal line in red
+  hist(CHI2[,i],main=paste("Histogram of",colnames(CHI2)[i]), 
+       xlab=colnames(CHI2)[i])
+}
+
+
+?neuralmodel_t
 
 # Correlation Matrix for 28 variables
 corrMRD <- cor(MRD[,13:length(MRD)]) 
@@ -101,11 +114,73 @@ Product.Volume
 MRD[,c(1, 2, 4, 5, 6)]
 
 
-#CHI SQUARED TESTING ()
+chisq.test(MRD)
+
+######################################-VARIABLE ISOLATED CHI SQUARED#####################################
+# Only the Product Type, Volume, Service Reviews and Customer Reviews for CHI Squared
+CHI2<-MReg[,c(5:10, 18)]
+
+# Expected values
+chisq.test(CHI2)$expected
+#Normal Chi squared test
+chisq.test(CHI2)
+# Dec tree of isolated columns 
+set.seed(123)
+CHI2T <- rpart(
+  Volume~ ., data=CHI2) #predict volume using all variables
+rpart.plot(CHI2T) #plot the decision tree
+
+
+?plot
+
+#CHI SQUARED TESTING (DONE!)
+
+
+#####################################-MANOVA#######################################################
+
+# Compare volume against a metric from the service and one from the shipping
+
+#
+
+# 2x2 Factorial MANOVA with 3 Dependent Variables. 
+Y <- cbind(y1,y2,y3)
+fit <- manova(Y ~ A*B)
+summary(fit, test="Pillai")
+
+sepl <- iris$Sepal.Length
+petl <- iris$Petal.Length
+# MANOVA test
+res.man <- manova(cbind(Sepal.Length, Petal.Length) ~ Species, data = iris)
+summary(res.man)
+
+#####################################-DATA SPLITTING-#############################################
+
+set.seed(123)
+# Set a 80/20 split
+inTraining <- createDataPartition(survey_cat$brand, p = .8, list = FALSE) # add volume as a variable
+#creates a vector with the rows to use for training
+training <- survey_cat[inTraining,] #subset training set
+testing <- survey_cat[-inTraining,] #subset testing set
 
 #################################################-ALGORITHMS-############################################
 
 #SVM models
 
 #GBM models
+
+calibrate.plot(y, p, distribution = "bernoulli", replace = TRUE,
+               line.par = list(col = "black"), shade.col = "lightyellow",
+               shade.density = NULL, rug.par = list(side = 1),
+               xlab = "Predicted value", ylab = "Observed average", xlim = NULL,
+               ylim = NULL, knots = NULL, df = 6, ...)
+
+
+##########################-Bayesian Linear Regression-############################
+
+
+
+summary(MRDNO5)
+
+
+
 
