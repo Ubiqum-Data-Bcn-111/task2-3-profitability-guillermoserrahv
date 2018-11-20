@@ -1,18 +1,25 @@
 setwd("/Users/guillermoserrahv/Desktop/Ubiqum/GitHub_Ubiqum/ubiqum1/task2-3-profitability-guillermoserrahv")
 getwd()
 
-#####-Appendix of data names and included values-#####
+###-Appendix of data names and included values-
 #MReg - Original, unedited file
-#MRegDum - Isolated dummy variables extracted from Product Type
-#MRD - Data including the dummies, but minus BestSellersRank
-#corrMRD - MRD ran under the correlation matrix with ALL variables
-#MRD05 - MRD excluding 5 Star Reviews
-#DTcorrMRD - Decision Tree on the correlation matrix data
-#CHI2 - A reduced sample including only the Volume, Service Reviews and Customer Reviews
-#CHI2T - Chi squared ran over CHI2.
+#MRegDum - Isolated dummy variables extracted from Product Type (total: 12 dummies)
+#MRD - Data including the dummies, but minus BestSellersRank (total: 28 variables)
+#corrMRD - MRD ran under the correlation matrix with ALL variables (total: 28 variables)
+#MRDNO5 - MRD excluding 5 Star Reviews, 1 Star Reviews, Negative Service Reviews, and adding Product Volume
+#         replacing Product Width, Product Lenght, and Product Depth. The dummies are kept (total: 23 variables)
+#VIMRD -For visual purposes, the dummies from MRDNO5 are removed (total: 11 variables, no dummies)
+#corrVIMRD - VIMRD ran under the correlation matrix with selected variables (total: 11 variables, no dummies)
+#DTcorrMRD - A simple Decision Tree based on the VIMRD (total: 11 variables)
+#VIMRD5 - Only Customer Review -2,3,4 Stars-, Positive Service and Volume (total: 5 variables)
+#DTcorrMRD5 - VIMRD5 ran under the correlation matrix with selected variables (total: 5 variables, no dummies)
+#CHI2A - MRD ran through Chi Squared for real and expected values (total: 28 variables, with dummies)
+#CHI2 - VIMRD ran through Chi Squared for real and expected values (total: 11 variables, no dummies)
+#CHI25 - VIMRD5 ran through Chi Squared for real and expected values (total: 5 variables, no dummies)
+#res.man - 3 dependent variables for MANOVA (3StarReviews, 4StarReviews and PositiveServiceReviews) + Volume
 
-##############################-INSTALLING LIBRARIES & DATA PREPARATION-##########################################
-# Install appropiate libraries here 
+##############################-INSTALLING LIBRARIES & DATA PREPARATION-#######################################
+# Install appropiate libraries for this exercise
 library(readr)
 library(caret)
 library(rpart)
@@ -40,13 +47,6 @@ names(MReg)        # Names your attributes
 MRegDum <- dummyVars(" ~ .", data=MReg)
 MRD <- data.frame(predict(MRegDum, newdata=MReg))
 
-#REMOVE OUTLIERS FROM VOLUME (MAKE SURE THIS IS A PRIORITY)
-
-# Checking the datatypes in the dataframe
-str(MReg)
-str(MRegDum)
-str(MRD)
-
 # Remove the missing value column, which is "Best Sellers Rank" based on the missing value test
 summary(MRD)
 is.na(MRD)
@@ -54,7 +54,13 @@ sum(is.na(MRD$BestSellersRank))
 MRD$BestSellersRank <- NULL
 sum(is.na(MRD))
 
+# Checking the datatypes in the dataframe
+str(MReg)
+str(MRegDum)
+str(MRD)
+
 # QQplots and Histograms (before correlation)
+set.seed(123)
 for(i in 1:(ncol(MRD))) {    #for every column
   if (is.numeric(MRD[,i])){  #if the variable is numeric
     qqnorm(MRD[,i],main=paste("Test",colnames(MRD)[i])) #plot qqnorm
@@ -64,90 +70,99 @@ for(i in 1:(ncol(MRD))) {    #for every column
   }
 }
 
-# Correlation Matrix for 28 variables
+# Correlation Matrix without the dummies
 corrMRD <- cor(MRD[,13:length(MRD)]) 
 corrMRD
 
-# Choose columns from 13 onwards (Basically remove the dummies)(only for visualization in the correlation matrix)
-MRD[,13:length(MRD)]
+# Remove x5StarReviews, x1StarReviews and NegativeServiceReview from the dataset based on the correlation matrix
+MRDNO5<-MRD[,c(-15, -19, -21)]
 
-# Remove x5Starreviews from the dataset
-MRDNO5<-MRD[,c(-15)]
-
-# Create a variable for Volume using Depth*Width*Height
+# Create a variable for Volume using Depth*Width*Height = Product Volume
 MRDNO5$Product.Volume<-MRDNO5$ProductDepth*MRDNO5$ProductWidth*MRDNO5$ProductHeight
 summary(MRDNO5$Product.Volume)
-MRDNO5$Product.Volume 
+MRDNO5$Product.Volume
 
-# Correlation Matrix for 28 variables
+# Remove the Product Depth, Product Width, and Product Height, instead keep only Product Volume
+MRDNO5<-MRDNO5[,c(-21, -22, -23)]
+
+# Choose columns from 13 onwards (Basically remove the dummies)(only for visualization in the correlation matrix)
+VIMRD<-MRDNO5[,13:length(MRDNO5)]
+
+# Correlation Matrix for 11 relevant variables, excluding dummies
 corrMRD5 <- cor(MRDNO5[,13:length(MRDNO5)]) 
-corrMRD5
-
-summary(MRDNO5$Volume)
+corrVIMRD <- cor(VIMRD[,]) 
+corrVIMRD
 
 ###################################-VISUALISATION OF CORRELATION MATRIX-######################################
-
 # Visualize the Correlation Matrix with the ggplot package
-ggplot(melt(corrMRD5), aes(Var1, Var2, fill=value)) +
+ggplot(melt(corrVIMRD), aes(Var1, Var2, fill=value)) +
   geom_tile() +
   scale_fill_gradient2(low="blue", mid="white", high="red") +
   coord_equal()
 
 # Visualize the Correlation Matrix with the ggcorrplot package 
-ggcorrplot(corrMRD5, type = "upper", hc.order = TRUE, colors=brewer.pal(n = 3, name = "RdYlBu"))
+ggcorrplot(corrVIMRD, type = "upper", hc.order = TRUE, colors=brewer.pal(n = 3, name = "RdYlBu"))
 #COLOUR CHOICES: RdYlBu or Spectral or YlGnBu
 
 #################################################-SIMPLE DESCISION TREE-#######################################
-
-# Simple Decision Tree 
+# Simple Decision Tree (11 variables, no dummies)
 set.seed(123)
 DTcorrMRD <- rpart(
-  Volume~ ., data=MRDNO5) #predict volume using all variables
-rpart.plot(DTcorrMRD) #plot the decision tree
+  Volume~ ., data=VIMRD, cp=0.0001) # Predict "Volume" using all remaining variables
+rpart.plot(DTcorrMRD) # Plot the simple Decision Tree
 
-# Remove x5Starreviews from the dataset
-MRDNO5<-MRD[,c(-15)]
-
-tree<- rpart(Volume~., data=existingtot, cp=0.001)
-rpart.plot(tree)
-
-#Do one only using these
-# Choosing some variables for the correlation visual test, but not all (NEEDS TO BE PROPERLY PLACED)(SAMPLE SET)
-
-MRD[,c(1, 2, 4, 5, 6)]
+# Simple Decision Tree (5 variables, isolating those related to Customer Review -2,3,4 Stars- and Positive Service)
+VIMRD5<-VIMRD[,c(3:6, 10)]
+set.seed(123)
+DTcorrMRD5 <- rpart(
+  Volume~ ., data=VIMRD5, cp=0.0001) # Predict "Volume" using all remaining variables
+rpart.plot(DTcorrMRD5) # Plot the simple Decision Tree
 
 ######################################-VARIABLE ISOLATED CHI SQUARED#####################################
-# Only the Product Type, Volume, Service Reviews and Customer Reviews for CHI Squared
-CHI2<-MReg[,c(5:10, 18)]
+# Using MRD (28 variables, incuding dummies)
+CHI2A<-MRD
+summary(CHI2A)
+str(CHI2A)
+CHI2A
+# Expected values
+chisq.test(CHI2A)$expected
+# Normal Chi squared test
+chisq.test(CHI2A)
 
+# Using VIMRD (11 variables)
+CHI2<-VIMRD
+summary(CHI2)
+str(CHI2)
+CHI2
 # Expected values
 chisq.test(CHI2)$expected
-#Normal Chi squared test
+# Normal Chi squared test
 chisq.test(CHI2)
-# Dec tree of isolated columns 
-set.seed(123)
-CHI2T <- rpart(
-  Volume~ ., data=CHI2) #predict volume using all variables
-rpart.plot(CHI2T) #plot the decision tree
 
-chisq.test(MRD)
-#####################################-MANOVA#######################################################
+# Using VIMRD5 (5 variables)
+CHI25<-VIMRD5
+summary(CHI25)
+str(CHI25)
+CHI25
+# Expected values
+chisq.test(CHI25)$expected
+# Normal Chi squared test
+chisq.test(CHI25)
 
-# Compare volume against a metric from the service and one from the shipping (4 star and positive reviews)
-
-# 2x2 Factorial MANOVA with 3 Dependent Variables. 
-Y <- cbind(y1,y2,y3)
-fit <- manova(Y ~ A*B)
-summary(fit, test="Pillai")
-
-sepl <- iris$Sepal.Length
-petl <- iris$Petal.Length
-# MANOVA test
-res.man <- manova(cbind(Sepal.Length, Petal.Length) ~ Species, data = iris)
-summary(res.man)
-
-# Look to see which differ
+#####################################-MANOVA & ANOVA-#######################################################
+# MANOVA with 3 dependant variables (3StarReviews, 4StarReviews and PositiveServiceReview) + Volume
+res.man <- manova(cbind(x3StarReviews, x4StarReviews, PositiveServiceReview) ~ Volume, data = VIMRD5)
+summary(res.man, test="Pillai")
 summary.aov(res.man)
+summary.manova(res.man)
+
+
+
+
+
+
+
+
 
 #####################################-DATA SPLITTING-#############################################
 
@@ -171,10 +186,10 @@ MRDNO5PR<-lm(volume~ PositiveServiceReview, trainSet)
 #################################################-NON-PARAMETRIC MODELS-#########################################
 
 #SVM models
-
 model <- svm(Y ~ X , data)
 predictedY <- predict(model, data)
 points(data$X, predictedY, col = "red", pch=4)
+
 
 # perform a grid search
 tuneResult <- tune(svm, Y ~ X,  data = data,
@@ -185,7 +200,6 @@ print(tuneResult)
 plot(tuneResult)
 
 #GBM models
-
 calibrate.plot(y, p, distribution = "bernoulli", replace = TRUE,
                line.par = list(col = "black"), shade.col = "lightyellow",
                shade.density = NULL, rug.par = list(side = 1),
