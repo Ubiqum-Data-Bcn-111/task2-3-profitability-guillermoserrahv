@@ -38,9 +38,11 @@ library(RColorBrewer)
 library(rpart.plot)
 library(xgboost)
 
-# Upload the Existing Product Attributes file
+# Upload the Existing Product Attributes file & New Products file
 MReg <- read.csv("existingproductattributes2017.2.csv")
 MReg <- as.data.frame(MReg)
+NPA<-read.csv("newproductattributes2017.2.csv")
+NPA <- as.data.frame(NPA)
 
 # Data exploration
 attributes(MReg)   # Attibutes list
@@ -128,36 +130,92 @@ rpart.plot(DTcorrMRD5) # Plot the simple Decision Tree
 res.an <- aov(Volume ~ ProductType  , data = MReg)
 summary.aov(res.an) #P number 0.0961
 
+#######REMOVE ALL WARRANTIES, THEY ARE LITTER FOR THIS TEST#######
+
 # MANOVA of ProductType (categorical) and Volume, 4StarReviews and PositiveServiceReviews (numerical) from MReg
 res.man <- manova(cbind(Volume, x4StarReviews, PositiveServiceReview) ~ ProductType, data = MReg)
 summary(res.man, test="Pillai")
-summary.manova(res.man)
+summary.manova(res.man) #P number: 2.084e-07 (because is so small (less than 0.05) the chances of relationship are high)
+
+#############################-REMOVE OUTLIERS FROM VOLUME-#########################################################
+# Finding the outlier values
+outlier_values <- boxplot.stats(VIMRD5$Volume)$out
+outlier_values
+# Visual graphic of the outliers from Volume
+par(mfrow = c(1, 1))
+boxplot(VIMRD5$Volume, main="Outliers in Sales Volume", boxwex=0.2)
+mtext(paste("Outliers: ", paste(outlier_values, collapse=", ")), cex=0.6)
+# Outliers filtered
+O5VO<-filter(VIMRD5, Volume!=7036 & Volume!=11204)
 
 #####################################-DATA SPLITTING-#############################################
-set.seed(123)
+# Choose only the values relevant to this exercise: 4StarReview, PositiveServiceReview and Volume
+O3V<-O5VO[,c(1,4,5)]
 # Set a 80/20 split
-INTraining <- createDataPartition(MRD$Volume, p = .8, list = FALSE)
-MRDtraining <- MRD[INTraining,] # Training set (80%)
-MRDtesting <- MRD[-INTraining,] # Testing set (20%)
+set.seed(123)
+INTraining <- createDataPartition(O3V$Volume, p = .8, list = FALSE)
+MRDtraining <- O3V[INTraining,] # Training set (80%)
+MRDtesting <- O3V[-INTraining,] # Testing set (20%)
 
-##############################################-LINEAR REGRESSION MODELS-##############################################
+##############################################-LINEAR REGRESSION MODELS-#####################################
 # Linear model of Volume and 4 Star Reviews
-LM4SMRD<-lm(Volume~ x4StarReviews, MRD)
+set.seed(123)
+LM4SMRD<-lm(Volume~ x4StarReviews, O3V)
 summary(LM4SMRD)
-plot(LM4SMRD)
+#plot(LM4SMRD)
+test_LM4SMRD<-predict(LM4SMRD, newdata=MRDtesting, metric="RMSE")
+test_LM4SMRD
+postResample(test_LM4SMRD, MRDtesting$Volume)
+#       RMSE    Rsquared         MAE 
+# 446.5131104   0.3526014 334.4223700 
 
 # Linear model of Volume and PositiveServiceReview
-LMPSMRD<-lm(Volume~ PositiveServiceReview, MRD)
+set.seed(123)
+LMPSMRD<-lm(Volume~ PositiveServiceReview, O3V)
 summary(LMPSMRD)
-plot(LMPSMRD)
+#plot(LMPSMRD)
+test_LMPSMRD<-predict(LMPSMRD, newdata=MRDtesting, metric="RMSE")
+test_LMPSMRD
+postResample(test_LMPSMRD, MRDtesting$Volume)
+#       RMSE    Rsquared         MAE 
+#397.6473042   0.4781089 302.9595108 
 
 #################################################-SVM MODELS-#########################################
+# Using all variables - number=10, repeats=3 (LINEAR)
 set.seed(123)
+ctrlSVM10 <- trainControl(method = "repeatedcv", number = 10, repeats = 3, savePred=T)
+SVMALL <- train(Volume ~., data=MRDtraining, method="svmLinear",
+                       trControl=ctrlSVM10,
+                       preProcess=c("center", "scale"),
+                       tuneLength=10)
+SVMALL
+predictors(SVMALL)
+summary(SVMALL)
+test_SVMALL<-predict(SVMALL, newdata=MRDtesting, metric="RMSE")
+test_SVMALL
+postResample(test_SVMALL, MRDtesting$Volume)
+#       RMSE    Rsquared         MAE 
+#302.6583255   0.7252705 133.8805233  
 
+# Using all variables - number=20, repeats=6 (RADIAL)
+set.seed(123)
+ctrlSVM20 <- trainControl(method = "repeatedcv", number = 20, repeats = 6, savePred=T)
+SVMALL2 <- train(Volume ~., data = MRDtraining, method = "svmRadial",
+                       trControl=ctrlSVM20,importance = TRUE,
+                       preProcess = c("center", "scale"),
+                       tuneLength = 10)
+SVMALL2
+predictions(SVMALL2)
+summary(SVMALL2)
+test_SVMALL2<-predict(SVMALL2, newdata=MRDtesting, metric="RMSE")
+test_SVMALL2
+postResample(test_SVMALL2, MRDtesting$Volume)
+#      RMSE   Rsquared        MAE 
+#114.075640   0.966004  78.787039 
 
 #######################################-GBM MODELS-###############################################
 set.seed(123)
-ctrl<-trainControl(method="repeatedcv", number=10, repeats=3, savePred=T)
+ctrlGBM<-trainControl(method="repeatedcv", number=10, repeats=3, savePred=T)
 
 # With Positive Service Reviews only
 GBMPS<-train(
@@ -166,10 +224,15 @@ GBMPS<-train(
   method="xgbTree", 
   preProc=c("center","scale"),
   tune.lenght=100,
-  trControl=ctrl)
+  trControl=ctrlGBM)
 GBMPS
 predictors(GBMPS)
 summary(GBMPS)
+test_GBMPS<-predict(GBMPS, newdata=MRDtesting, metric="RMSE")
+test_GBMPS
+postResample(test_GBMPS, MRDtesting$Volume)
+#      RMSE   Rsquared        MAE 
+#98.1457942  0.9728496 49.5076163
 
 # With 4 Star Reviews only
 GBM4S<-train(
@@ -178,10 +241,15 @@ GBM4S<-train(
   method="xgbTree", 
   preProc=c("center","scale"),
   tune.lenght=100,
-  trControl=ctrl)
+  trControl=ctrlGBM)
 GBM4S
 predictors(GBM4S)
 summary(GBM4S)
+test_GBM4S<-predict(GBM4S, newdata=MRDtesting, metric="RMSE")
+test_GBM4S
+postResample(test_GBM4S, MRDtesting$Volume)
+#       RMSE    Rsquared         MAE 
+#380.9054297   0.5505641 204.5372620
 
 # With 4 Star Reviews and Positive Service Review
 GBM4SPS<-train(
@@ -190,47 +258,35 @@ GBM4SPS<-train(
   method="xgbTree", 
   preProc=c("center","scale"),
   tune.lenght=100,
-  trControl=ctrl)
+  trControl=ctrlGBM)
 GBM4SPS
 predictors(GBM4SPS)
 summary(GBM4SPS)
-
-# With 4 Star Reviews, Positive Service Reviews and Product Game Console
-GBM4SPSGC<-train(
-    Volume ~ x4StarReviews+PositiveServiceReview+ProductType.GameConsole,
-    data=MRDtraining,
-    method="xgbTree", 
-    preProc=c("center","scale"),
-    tune.lenght=100,
-    trControl=ctrl)
-GBM4SPSGC
-predictors(GBM4SPSGC)
-summary(GBM4SPSGC)
+test_GBM4SPS<-predict(GBM4SPS, newdata=MRDtesting, metric="RMSE")
+test_GBM4SPS
+postResample(test_GBM4SPS, MRDtesting$Volume)
+#       RMSE    Rsquared         MAE 
+#414.7201538   0.4836321 208.9047484 
 
 ##############################-APPLY MODELS TO TESTING DATA-##################################
+# Training the final chosen models
+#LM1 <- train(Volume ~ ., data=data.frame(O3V), method="lm", trainControl=ctrlGBM, importance=TRUE, preProcess=c("center","scale"), tuneLenght=5)
+SVM1 <- train(Volume ~ ., data=data.frame(O3V), method="svmRadial", trainControl=ctrlGBM, importance=TRUE, preProcess=c("center","scale"), tuneLenght=5)  
+GBM1 <- train(Volume ~ ., data=data.frame(O3V), method="xgbTree", trainControl=ctrlGBM, importance=TRUE, preProcess=c("center","scale"), tuneLenght=5)
+# Make predictions
+preSVM <- predict(SVM1,NPA)
+preGBM <- predict(GBM1,NPA)
+# Attirbutes of the prediction models
+preSVM
+summary(preSVM)
+preGBM
+summary(preGBM)
+# New prediction list
+newpredictionlist <- c()
+newpredictionlist <- cbind(data.frame(NPA$ProductType),data.frame(NPA$ProductNum),preSVM,preGBM)
+newpredictionlist
+summary(newpredictionlist)
+# Write over new document
+write.csv(newpredictionlist, file="final.csv", row.names = TRUE)
 
-# Apply Training set (80%) to Test set (20%)
-
-
-
-# Apply the SVM model into the Test set
-
-# Apply the GBM model into the Test set
-
-
-
-#total brand preferences
-all_table <- table(survey_inc$predictions)+table(survey$brand)
-
-# Use the test set to apply into the new product attributes folder
-
-output <- newproductattributes 
-
-output$predictions <- finalPred
-
-################################-SAVE THE FILE-##########################################
-
-#Savig the file
-rite.csv(output, file="C2.T3output.csv", row.names = TRUE)
-
-#MAKE SURE THAT THE INFORMATION IS RELEVANT TO THE 4 PRODUCTS - PC, Laptops, Netbooks and Smartphones
+#################################-THE END IS THE BEGGINING IS THE END-#####################################
