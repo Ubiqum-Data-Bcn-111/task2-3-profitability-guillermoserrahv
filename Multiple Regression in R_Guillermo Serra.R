@@ -1,8 +1,7 @@
 setwd("/Users/guillermoserrahv/Desktop/Ubiqum/GitHub_Ubiqum/ubiqum1/task2-3-profitability-guillermoserrahv")
 getwd()
 
-# Appendix of data names and included values
-
+#####-Appendix of data names and included values-#####
 #MReg - Original, unedited file
 #MRegDum - Isolated dummy variables extracted from Product Type
 #MRD - Data including the dummies, but minus BestSellersRank
@@ -41,17 +40,7 @@ names(MReg)        # Names your attributes
 MRegDum <- dummyVars(" ~ .", data=MReg)
 MRD <- data.frame(predict(MRegDum, newdata=MReg))
 
-
-# CHECK THIS PART, MAKE SURE IS CORRECT!! INCLUDING THE ONE BELOW  (REMOVE IT?????)
-MRD$ProductNum <- MReg$ProductNum
-head(MRD)
-
-#merging the two datasets readyData and existingprod (REMOVE ITTTTTTTTTT?????? HURRRY UP!!!!!!!)
-MRDum <- merge(MRD,MReg,by="ProductNum")
-head(MRDum)
-summary(MRDum)
-MRDum
-
+#REMOVE OUTLIERS FROM VOLUME (MAKE SURE THIS IS A PRIORITY)
 
 # Checking the datatypes in the dataframe
 str(MReg)
@@ -75,41 +64,38 @@ for(i in 1:(ncol(MRD))) {    #for every column
   }
 }
 
-# Neural model (ANN) (ASK ABDEL ON THIS ONE)(MAKE SURE TO MENTIONED THE "BENEFITS" OVER SVM FROM BAYES BOOK)
-for (i in 1:(ncol(CHI2))) {
-  predictions = compute(get(paste("neuralmodel_t", i, sep = "")), MRDNO5[, 1:4])
-  qqnorm(CHI2[,i],main=paste("Test",colnames(CHI2)[i])) #plot qqnorm
-  qqline(CHI2[,i],col="blue") #add qqnormal line in red
-  hist(CHI2[,i],main=paste("Histogram of",colnames(CHI2)[i]), 
-       xlab=colnames(CHI2)[i])
-}
-
-?neuralmodel_t
-
 # Correlation Matrix for 28 variables
 corrMRD <- cor(MRD[,13:length(MRD)]) 
 corrMRD
 
-#Choose columns from 13 onwards (Basically remove the dummies)(only for visualization in the correlation matrix)
+# Choose columns from 13 onwards (Basically remove the dummies)(only for visualization in the correlation matrix)
 MRD[,13:length(MRD)]
 
 # Remove x5Starreviews from the dataset
 MRDNO5<-MRD[,c(-15)]
 
+# Create a variable for Volume using Depth*Width*Height
+MRDNO5$Product.Volume<-MRDNO5$ProductDepth*MRDNO5$ProductWidth*MRDNO5$ProductHeight
+summary(MRDNO5$Product.Volume)
+MRDNO5$Product.Volume 
+
+# Correlation Matrix for 28 variables
+corrMRD5 <- cor(MRDNO5[,13:length(MRDNO5)]) 
+corrMRD5
+
+summary(MRDNO5$Volume)
+
 ###################################-VISUALISATION OF CORRELATION MATRIX-######################################
 
 # Visualize the Correlation Matrix with the ggplot package
-ggplot(melt(corrMRD), aes(Var1, Var2, fill=value)) +
+ggplot(melt(corrMRD5), aes(Var1, Var2, fill=value)) +
   geom_tile() +
   scale_fill_gradient2(low="blue", mid="white", high="red") +
   coord_equal()
 
 # Visualize the Correlation Matrix with the ggcorrplot package 
-ggcorrplot(corrMRD, type = "upper", hc.order = TRUE, colors=brewer.pal(n = 3, name = "RdYlBu"))
+ggcorrplot(corrMRD5, type = "upper", hc.order = TRUE, colors=brewer.pal(n = 3, name = "RdYlBu"))
 #COLOUR CHOICES: RdYlBu or Spectral or YlGnBu
-
-# Visualize the Correlation Matrix with the corrplot package (same as the Plan of Attack)
-#corrplot(corrMRD)
 
 #################################################-SIMPLE DESCISION TREE-#######################################
 
@@ -125,20 +111,10 @@ MRDNO5<-MRD[,c(-15)]
 tree<- rpart(Volume~., data=existingtot, cp=0.001)
 rpart.plot(tree)
 
-#############################################-BELOW: FOR UPDATING ABOVE-##################################
-
-
-# Create a variable for Volume using Depth*Width*Height   (NEEDS TO BE PROPERLY PLACED)
-MRD$Product.Volume<-MRD$ProductDepth*MRD$ProductWidth*MRD$ProductHeight
-summary(Product.Volume)
-Product.Volume
-
+#Do one only using these
 # Choosing some variables for the correlation visual test, but not all (NEEDS TO BE PROPERLY PLACED)(SAMPLE SET)
 
 MRD[,c(1, 2, 4, 5, 6)]
-
-
-chisq.test(MRD)
 
 ######################################-VARIABLE ISOLATED CHI SQUARED#####################################
 # Only the Product Type, Volume, Service Reviews and Customer Reviews for CHI Squared
@@ -154,12 +130,7 @@ CHI2T <- rpart(
   Volume~ ., data=CHI2) #predict volume using all variables
 rpart.plot(CHI2T) #plot the decision tree
 
-
-?plot
-
-#CHI SQUARED TESTING (DONE!)
-
-
+chisq.test(MRD)
 #####################################-MANOVA#######################################################
 
 # Compare volume against a metric from the service and one from the shipping (4 star and positive reviews)
@@ -175,7 +146,6 @@ petl <- iris$Petal.Length
 res.man <- manova(cbind(Sepal.Length, Petal.Length) ~ Species, data = iris)
 summary(res.man)
 
-
 # Look to see which differ
 summary.aov(res.man)
 
@@ -188,9 +158,31 @@ INTraining <- createDataPartition(survey_cat$brand, p = .8, list = FALSE) # add 
 MRDtraining <- survey_cat[inTraining,] #subset training set
 MRDtesting <- survey_cat[-inTraining,] #subset testing set
 
-#################################################-ALGORITHMS-############################################
+##############################################-LINEAR REGRESSION-##############################################
+
+# Linear model for 4 Star Reviews
+MRDNO54S<-lm(volume~ x4StarReviews, trainSet)
+summary(MRDNO54S)
+
+
+# Linear model for PositiveServiceReview
+MRDNO5PR<-lm(volume~ PositiveServiceReview, trainSet)
+
+#################################################-NON-PARAMETRIC MODELS-#########################################
 
 #SVM models
+
+model <- svm(Y ~ X , data)
+predictedY <- predict(model, data)
+points(data$X, predictedY, col = "red", pch=4)
+
+# perform a grid search
+tuneResult <- tune(svm, Y ~ X,  data = data,
+                   ranges = list(epsilon = seq(0,1,0.1), cost = 2^(2:9))
+)
+print(tuneResult)
+# Draw the tuning graph
+plot(tuneResult)
 
 #GBM models
 
@@ -200,31 +192,30 @@ calibrate.plot(y, p, distribution = "bernoulli", replace = TRUE,
                xlab = "Predicted value", ylab = "Observed average", xlim = NULL,
                ylim = NULL, knots = NULL, df = 6, ...)
 
-
-##########################-Bayesian Linear Regression-############################
-
-#Ask Abdel for help on this, should be in the Bayes Statistical methods book
-
-
-
-
-
 ##############################-APPLY MODELS TO TESTING DATA-##################################
 
-#COPY FROM PREVIOUS TASK
+# Apply Training set (80%) to Test set (20%)
 
 
+
+# Apply the SVM model into the Test set
+
+# Apply the GBM model into the Test set
+
+
+
+#total brand preferences
+all_table <- table(survey_inc$predictions)+table(survey$brand)
+
+# Use the test set to apply into the new product attributes folder
 
 output <- newproductattributes 
 
 output$predictions <- finalPred
 
-
 ################################-SAVE THE FILE-##########################################
 
-
+#Savig the file
 rite.csv(output, file="C2.T3output.csv", row.names = TRUE)
 
-
-#MAKE SURE THAT THE INFORMATION IS RELEVANT TO THE 4 PRODUCTS THAT BLACKWELL WANTS
-
+#MAKE SURE THAT THE INFORMATION IS RELEVANT TO THE 4 PRODUCTS - PC, Laptops, Netbooks and Smartphones
